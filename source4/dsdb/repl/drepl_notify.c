@@ -343,6 +343,9 @@ static WERROR dreplsrv_notify_check(struct dreplsrv_service *s,
 	uint64_t uSNUrgent;
 	uint32_t i;
 	int ret;
+	time_t now;
+
+	now = time(NULL);
 
 	werr = dsdb_loadreps(s->samdb, mem_ctx, p->dn, "repsTo", &reps, &count);
 	if (!W_ERROR_IS_OK(werr)) {
@@ -362,10 +365,13 @@ static WERROR dreplsrv_notify_check(struct dreplsrv_service *s,
 	for (i=0; i<count; i++) {
 		struct dreplsrv_partition_source_dsa *sdsa;
 		uint32_t replica_flags;
+		time_t last_success;
 		sdsa = dreplsrv_find_notify_dsa(p, &reps[i].ctr.ctr1.source_dsa_obj_guid);
 		replica_flags = reps[i].ctr.ctr1.replica_flags;
+		last_success = nt_time_to_unix(reps[i].ctr.ctr1.last_success);
 		if (sdsa == NULL) continue;
-		if (sdsa->notify_uSN < uSNHighest) {
+		/* queue DsReplicaSync based on uSN or age */
+		if (sdsa->notify_uSN < uSNHighest || (now - last_success) > 3600 ) {
 			/* we need to tell this partner to replicate
 			   with us */
 			bool is_urgent = sdsa->notify_uSN < uSNUrgent;
